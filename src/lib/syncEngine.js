@@ -30,12 +30,12 @@ export const syncData = async () => {
         .insert([
           {
             id: assessment.id,
-  learner_id: assessment.learner_id,
-  checkpoint: assessment.checkpoint, // <-- NEW
-  reading_components: assessment.reading_components,
-  numeracy_components: assessment.numeracy_components, // <-- NEW
-  next_instructional_step: assessment.next_instructional_step
-}]);
+            learner_id: assessment.learner_id,
+            checkpoint: assessment.checkpoint, // <-- NEW
+            reading_components: assessment.reading_components,
+            numeracy_components: assessment.numeracy_components, // <-- NEW
+            next_instructional_step: assessment.next_instructional_step
+          }]);
 
       if (error) {
         console.error('Error syncing record:', error);

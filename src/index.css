@@ -3,17 +3,15 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg: #EDF1F7; --surface: #FFFFFF; --surface-2: #F5F8FC; --line: #DCE3EE;
-  --fg: #0F1B2D; --muted: #5A6A81;
-  --primary: #1D5FD0; --primary-strong: #1649A5; --primary-soft: #E3ECFC; --on-primary: #FFFFFF;
-  --ok: #157A3C; --ok-soft: #DCF3E4; --ok-bar: #22A55A;
-  --warn: #8A5A00; --warn-soft: #FDF0C8; --warn-bar: #E9B21C;
-  --risk: #B42318; --risk-soft: #FBE1DE; --risk-bar: #DC4638;
+body {
+  font-family: 'Inter', 'Times New Roman', Times, serif;
+  background-color: #EDF1F7;
+  color: #0F1B2D;
+  transition: background-color 0.3s, color 0.3s;
 }
 
-body {
-  font-family: 'Inter', sans-serif;
-  background-color: var(--bg);
-  color: var(--fg);
+/* DARK MODE VARIABLES */
+html.dark body {
+  background-color: #0A111D;
+  color: #E8EEF8;
 }
