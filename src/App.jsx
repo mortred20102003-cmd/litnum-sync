@@ -38,12 +38,23 @@ export default function App() {
   const [isSaved, setIsSaved] = useState(false);
   const [checkpoint, setCheckpoint] = useState('Monthly');
   const [nextStep, setNextStep] = useState('');
-  const [readingData, setReadingData] = useState({ oralLanguage: 'Developing', phonics: 'Developing', vocabulary: 'Developing', fluency: 'Developing', comprehension: 'Developing' });
-  const [numeracyData, setNumeracyData] = useState({ competency: 'Subtracts 2-digit numbers with regrouping', cpaStage: 2 });
+  const [assessmentText, setAssessmentText] = useState('');
+  const [overallReading, setOverallReading] = useState('');
+  
+  const [readingData, setReadingData] = useState({ 
+    oralLanguage: 'Developing', phonological: 'Developing', phonics: 'Developing', 
+    vocabulary: 'Developing', fluency: 'Developing', comprehension: 'Developing' 
+  });
+  
+  const [numeracyData, setNumeracyData] = useState({ 
+    competency: 'Subtracts 2-digit numbers with regrouping', cpaStage: 2, mathReasoning: 'Developing'
+  });
 
   // Modals
   const [isLearnerModalOpen, setIsLearnerModalOpen] = useState(false);
-  const [newLearner, setNewLearner] = useState({ firstName: '', lastName: '', gradeLevel: 'Grade 1' });
+  const [newLearner, setNewLearner] = useState({ 
+    firstName: '', lastName: '', gradeLevel: 'Grade 1', lrn: '', readingBaseline: '', numeracyBaseline: '', priorityNeed: '' 
+  });
   const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
   const [activeAssessment, setActiveAssessment] = useState(null);
   const [interventionText, setInterventionText] = useState('');
@@ -119,7 +130,7 @@ export default function App() {
   }, [session]);
 
   useEffect(() => {
-    if (view === 'teacher' && userRole === 'teacher') fetchLearners();
+    if ((view === 'teacher' && userRole === 'teacher') || (view === 'principal' && userRole === 'principal')) fetchLearners();
     if (view === 'principal' && userRole === 'principal') fetchCloudData();
     if (userRole === 'superAdmin') { fetchAllUsers(); fetchCloudData(); }
   }, [view, userRole]);
@@ -144,20 +155,49 @@ export default function App() {
 
   const handleAddLearner = async () => {
     if (!newLearner.firstName || !newLearner.lastName) return alert("Enter name");
-    const { error } = await supabase.from('learners').insert([{ first_name: newLearner.firstName, last_name: newLearner.lastName, grade_level: newLearner.gradeLevel }]);
-    if (!error) { setIsLearnerModalOpen(false); setNewLearner({ firstName: '', lastName: '', gradeLevel: 'Grade 1' }); fetchLearners(); }
+    const { error } = await supabase.from('learners').insert([{ 
+      first_name: newLearner.firstName, 
+      last_name: newLearner.lastName, 
+      grade_level: newLearner.gradeLevel,
+      lrn: newLearner.lrn,
+      reading_baseline: newLearner.readingBaseline,
+      numeracy_baseline: newLearner.numeracyBaseline,
+      priority_need: newLearner.priorityNeed
+    }]);
+    if (!error) { 
+      setIsLearnerModalOpen(false); 
+      setNewLearner({ firstName: '', lastName: '', gradeLevel: 'Grade 1', lrn: '', readingBaseline: '', numeracyBaseline: '', priorityNeed: '' }); 
+      fetchLearners(); 
+    } else {
+      alert("Error adding learner. Check console.");
+      console.error(error);
+    }
   };
 
   const handleSaveOffline = async () => {
     try {
       const assessmentId = crypto.randomUUID();
       await db.assessments.add({ 
-        id: assessmentId, learner_id: selectedLearner.id, checkpoint, 
-        reading_components: readingData, numeracy_components: numeracyData, 
-        next_instructional_step: nextStep, sync_status: 'pending' 
+        id: assessmentId, 
+        learner_id: selectedLearner.id, 
+        checkpoint, 
+        reading_components: { ...readingData, assessmentText, overallReading }, 
+        numeracy_components: numeracyData, 
+        next_instructional_step: nextStep, 
+        sync_status: 'pending' 
       });
       setIsSaved(true);
-      setTimeout(() => { setIsSaved(false); setTeacherTab('learners'); setSelectedLearner(null); }, 2000);
+      setTimeout(() => { 
+        setIsSaved(false); 
+        setTeacherTab('learners'); 
+        setSelectedLearner(null); 
+        // Reset form
+        setReadingData({ oralLanguage: 'Developing', phonological: 'Developing', phonics: 'Developing', vocabulary: 'Developing', fluency: 'Developing', comprehension: 'Developing' });
+        setNumeracyData({ competency: 'Subtracts 2-digit numbers with regrouping', cpaStage: 2, mathReasoning: 'Developing' });
+        setNextStep('');
+        setAssessmentText('');
+        setOverallReading('');
+      }, 2000);
     } catch (error) { console.error(error); }
   };
 
@@ -166,20 +206,20 @@ export default function App() {
     setIsInterventionModalOpen(false); fetchCloudData();
   };
 
-  const getLearnerName = (id) => {
+  const getLearnerInfo = (id) => {
     const l = learners.find(x => x.id === id);
-    return l ? `${l.last_name}, ${l.first_name}` : 'Unknown Learner';
+    return l || { last_name: 'Unknown', first_name: 'Learner', lrn: 'N/A', reading_baseline: '-', numeracy_baseline: '-' };
   };
 
   const LevelButton = ({ label, icon, active, onClick, type }) => {
-    const base = "flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-bold transition border border-transparent ";
+    const base = "flex-1 flex flex-col items-center justify-center py-1.5 px-1 rounded-lg text-[10px] font-bold transition border border-transparent ";
     let styles = "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 ";
     if (active) {
       if (type === 'ns') styles = "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
       if (type === 'dv') styles = "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800";
       if (type === 'pf') styles = "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
     }
-    return <button onClick={onClick} className={base + styles}>{icon}<span className="mt-1">{label}</span></button>;
+    return <button onClick={onClick} className={base + styles}>{icon}<span className="mt-0.5">{label}</span></button>;
   };
 
   // --- LOGIN SCREEN ---
@@ -209,12 +249,11 @@ export default function App() {
     <div className="min-h-screen bg-[#EDF1F7] dark:bg-[#0A111D] text-[#0F1B2D] dark:text-[#E8EEF8] font-sans transition-colors">
       
       {/* ========================================================= */}
-      {/* TEACHER MOBILE APP INTERFACE (Bottom Nav) */}
+      {/* TEACHER MOBILE APP INTERFACE */}
       {/* ========================================================= */}
       {view === 'teacher' && userRole === 'teacher' && (
         <div className="max-w-md mx-auto min-h-screen flex flex-col relative pb-20">
           
-          {/* Top Mobile Header */}
           <header className="px-5 pt-6 pb-4 flex justify-between items-center">
             <div>
               <h1 className="text-xl font-extrabold text-blue-900 dark:text-white leading-tight">LPMT</h1>
@@ -228,22 +267,27 @@ export default function App() {
             </div>
           </header>
 
-          {/* Main Content Area based on Tab */}
           <main className="flex-1 px-4">
             
-            {/* TAB: LEARNERS */}
+            {/* TAB: LEARNERS (Form 1) */}
             {teacherTab === 'learners' && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden animate-fade-in">
                 <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
                   <h2 className="font-bold text-gray-800 dark:text-white">Class Roster</h2>
-                  <button onClick={() => setIsLearnerModalOpen(true)} className="flex items-center gap-1 text-xs font-bold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"><UserPlus size={14} /> Add</button>
+                  <button onClick={() => setIsLearnerModalOpen(true)} className="flex items-center gap-1 text-xs font-bold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"><UserPlus size={14} /> Add Learner</button>
                 </div>
                 <ul className="divide-y divide-gray-100 dark:divide-gray-700">
                   {learners.map(l => (
                     <li key={l.id}>
-                      <button onClick={() => { setSelectedLearner(l); setTeacherTab('assess'); }} className="w-full text-left p-4 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold text-sm">{l.first_name[0]}{l.last_name[0]}</div>
-                        <div><span className="font-bold block text-gray-900 dark:text-white text-sm">{l.last_name}, {l.first_name}</span><span className="text-[11px] text-gray-500 dark:text-gray-400">{l.grade_level}</span></div>
+                      <button onClick={() => { setSelectedLearner(l); setTeacherTab('assess'); }} className="w-full text-left p-4 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-400 flex items-center justify-center font-bold text-sm">{l.first_name[0]}{l.last_name[0]}</div>
+                          <div>
+                            <span className="font-bold block text-gray-900 dark:text-white text-sm">{l.last_name}, {l.first_name}</span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">{l.grade_level} • LRN: {l.lrn || 'N/A'}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-600 dark:text-gray-300 font-bold">{l.reading_baseline || 'No Baseline'}</span>
                       </button>
                     </li>
                   ))}
@@ -252,7 +296,7 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: ASSESS */}
+            {/* TAB: ASSESS (Forms 2 & 3) */}
             {teacherTab === 'assess' && (
               <div className="animate-fade-in">
                 {!selectedLearner ? (
@@ -262,13 +306,26 @@ export default function App() {
                     <button onClick={() => setTeacherTab('learners')} className="mt-4 text-blue-600 font-bold text-sm">Go to Roster</button>
                   </div>
                 ) : (
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
                     <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-blue-900 text-white">
-                      <div><h2 className="font-bold text-lg">{selectedLearner.first_name} {selectedLearner.last_name}</h2><p className="text-blue-200 text-[11px]">{selectedLearner.grade_level}</p></div>
+                      <div>
+                        <h2 className="font-bold text-lg leading-tight">{selectedLearner.first_name} {selectedLearner.last_name}</h2>
+                        <p className="text-blue-200 text-[11px]">{selectedLearner.grade_level} • LRN: {selectedLearner.lrn || 'N/A'}</p>
+                      </div>
                       <button onClick={() => { setSelectedLearner(null); setTeacherTab('learners'); }} className="text-xs bg-white/20 px-3 py-1.5 rounded-lg font-semibold">Close</button>
                     </div>
                     <div className="p-4 space-y-5">
                       
+                      {/* Checkpoint */}
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-1">Monitoring Checkpoint</label>
+                        <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-xl gap-1">
+                          {['Baseline', 'Monthly', 'Endline'].map(cp => (
+                            <button key={cp} onClick={() => setCheckpoint(cp)} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${checkpoint === cp ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-600'}`}>{cp}</button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* Subject Tabs */}
                       <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
                         <button onClick={() => setActiveSubject('reading')} className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1 transition ${activeSubject === 'reading' ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}><BookOpen size={14}/> Reading</button>
@@ -277,17 +334,15 @@ export default function App() {
 
                       {activeSubject === 'reading' ? (
                         <div className="space-y-3">
-                           <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Checkpoint</p>
-                           <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-xl gap-1 mb-3">
-                              {['Baseline', 'Monthly', 'Endline'].map(cp => (
-                                <button key={cp} onClick={() => setCheckpoint(cp)} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${checkpoint === cp ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-600'}`}>{cp}</button>
-                              ))}
-                            </div>
                           {[
-                            { k: 'oralLanguage', label: 'Oral Language' }, { k: 'phonics', label: 'Phonics' }, 
-                            { k: 'vocabulary', label: 'Vocabulary' }, { k: 'fluency', label: 'Fluency' }, { k: 'comprehension', label: 'Comprehension' }
+                            { k: 'oralLanguage', label: 'Oral Language & Listening' }, 
+                            { k: 'phonological', label: 'Phonological Awareness' }, 
+                            { k: 'phonics', label: 'Phonics & Word Recognition' }, 
+                            { k: 'vocabulary', label: 'Vocabulary' }, 
+                            { k: 'fluency', label: 'Fluency' }, 
+                            { k: 'comprehension', label: 'Comprehension' }
                           ].map(item => (
-                            <div key={item.k} className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                            <div key={item.k} className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-xl p-2.5">
                               <p className="font-bold text-xs text-gray-800 dark:text-gray-200 mb-2">{item.label}</p>
                               <div className="flex gap-1.5">
                                 <LevelButton label="Needs" type="ns" icon={<AlertTriangle size={12}/>} active={readingData[item.k] === 'Needs Support'} onClick={() => setReadingData({...readingData, [item.k]: 'Needs Support'})} />
@@ -296,18 +351,31 @@ export default function App() {
                               </div>
                             </div>
                           ))}
+                          
+                          <div className="pt-2">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Assessment / Text Used</label>
+                            <input type="text" className="w-full p-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-xs dark:text-white" placeholder="e.g. Phil-IRI Grade 2 Passage" value={assessmentText} onChange={e => setAssessmentText(e.target.value)} />
+                          </div>
+                          
+                          <div className="pt-2">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Overall Reading Level</label>
+                            <input type="text" className="w-full p-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-xs dark:text-white" placeholder="e.g. Frustration / Instructional / Independent" value={overallReading} onChange={e => setOverallReading(e.target.value)} />
+                          </div>
                         </div>
                       ) : (
                         <div className="space-y-4">
                           <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Competency</label>
-                            <select className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 font-semibold text-xs text-gray-800 dark:text-gray-200" value={numeracyData.competency} onChange={e => setNumeracyData({...numeracyData, competency: e.target.value})}>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Competency / Skill</label>
+                            <select className="w-full p-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 font-semibold text-xs text-gray-800 dark:text-gray-200" value={numeracyData.competency} onChange={e => setNumeracyData({...numeracyData, competency: e.target.value})}>
                               <option>Subtracts 2-digit numbers with regrouping</option>
                               <option>Adds 2-digit numbers with regrouping</option>
+                              <option>Skip-counts by 2s, 5s and 10s up to 100</option>
+                              <option>Multiplication as repeated addition</option>
                             </select>
                           </div>
+                          
                           <div className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl p-4 shadow-sm">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-4">CPA Progression</p>
+                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-3">CPA Progression</p>
                             <div className="flex justify-between items-center relative">
                               <div className="absolute left-6 right-6 top-1/2 h-1 bg-gray-200 dark:bg-gray-600 -z-10"></div>
                               {[{ s: 1, label: 'Concrete', icon: '🧱' }, { s: 2, label: 'Pictorial', icon: '🎨' }, { s: 3, label: 'Abstract', icon: '🔢' }].map((stage) => (
@@ -320,12 +388,21 @@ export default function App() {
                               ))}
                             </div>
                           </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Mathematical Reasoning</label>
+                            <select className="w-full p-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 font-semibold text-xs text-gray-800 dark:text-gray-200" value={numeracyData.mathReasoning} onChange={e => setNumeracyData({...numeracyData, mathReasoning: e.target.value})}>
+                              <option value="Needs Support">Needs Support</option>
+                              <option value="Developing">Developing</option>
+                              <option value="Proficient">Proficient</option>
+                            </select>
+                          </div>
                         </div>
                       )}
 
                       <div className="pt-2">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Next Step / Remarks</label>
-                        <textarea className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-xs h-20 dark:text-white" placeholder="e.g. Pair with reading buddy..." value={nextStep} onChange={e => setNextStep(e.target.value)}></textarea>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Next Instructional Step</label>
+                        <textarea className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-xs h-16 dark:text-white" placeholder="Action plan..." value={nextStep} onChange={e => setNextStep(e.target.value)}></textarea>
                       </div>
 
                       <button onClick={handleSaveOffline} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-md flex justify-center items-center gap-2 transition">
@@ -384,7 +461,6 @@ export default function App() {
 
           </main>
 
-          {/* BOTTOM NAVIGATION BAR (Mobile App Style) */}
           <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex justify-around py-3 pb-safe z-40 max-w-md mx-auto">
             <button onClick={() => setTeacherTab('learners')} className={`flex flex-col items-center gap-1 text-[10px] font-bold ${teacherTab === 'learners' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}><Users size={20} /> Learners</button>
             <button onClick={() => setTeacherTab('assess')} className={`flex flex-col items-center gap-1 text-[10px] font-bold ${teacherTab === 'assess' ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`}><ClipboardList size={20} /> Assess</button>
@@ -395,12 +471,11 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* PRINCIPAL DESKTOP DASHBOARD (Sidebar Layout) */}
+      {/* PRINCIPAL DESKTOP DASHBOARD (Form 5) */}
       {/* ========================================================= */}
       {view === 'principal' && userRole === 'principal' && (
         <div className="flex h-screen bg-[#EDF1F7] dark:bg-[#0A111D] transition-colors overflow-hidden">
           
-          {/* Desktop Sidebar */}
           <aside className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col print:hidden transition-colors">
             <div className="p-6 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-3 mb-2">
@@ -412,7 +487,7 @@ export default function App() {
 
             <nav className="flex-1 p-4 space-y-1">
               <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-bold text-sm transition"><LayoutDashboard size={18}/> Dashboard</button>
-              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold text-sm transition"><Users size={18}/> Learners <span className="ml-auto bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full">{learners.length || 150}</span></button>
+              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold text-sm transition"><Users size={18}/> Learners <span className="ml-auto bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-2 py-0.5 rounded-full">{learners.length}</span></button>
               <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold text-sm transition"><AlertTriangle size={18}/> Interventions <span className="ml-auto bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs px-2 py-0.5 rounded-full">12</span></button>
             </nav>
 
@@ -428,102 +503,73 @@ export default function App() {
             </div>
           </aside>
 
-          {/* Main Content Area */}
           <main className="flex-1 overflow-y-auto p-8 print:p-0">
             <div className="max-w-5xl mx-auto space-y-6">
               
-              {/* Print Header */}
               <div className="hidden print:block text-center mb-8 border-b-2 border-black pb-4 text-black">
-                <h1 className="text-2xl font-bold uppercase">Learners Progress Monitoring Tool</h1>
+                <h1 className="text-2xl font-bold uppercase">Learner Progress Monitoring Tool</h1>
                 <p className="text-sm">Generated on: {new Date().toLocaleDateString()}</p>
               </div>
 
               <div className="flex justify-between items-end print:hidden">
                 <div>
-                  <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mb-1">Grade Progress Dashboard</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Monthly check · November 2026</p>
-                </div>
-                <div className="flex gap-2">
-                  <button className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-2">Grade 2 <ChevronDown size={14}/></button>
-                  <button className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-2">Monthly <ChevronDown size={14}/></button>
+                  <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mb-1">Learner Progress Summary</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Baseline vs Current Status Review</p>
                 </div>
               </div>
 
-              {/* Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                  <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold text-gray-500 dark:text-gray-400">Learners Registered</span><Users className="text-blue-500" size={20}/></div>
-                  <p className="text-4xl font-extrabold text-gray-900 dark:text-white">{learners.length || 150}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">Grades 1 to 3 · 50 per grade</p>
-                </div>
-                <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                  <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold text-gray-500 dark:text-gray-400">Competencies Mastered</span><CheckCircle className="text-green-500" size={20}/></div>
-                  <p className="text-4xl font-extrabold text-gray-900 dark:text-white">65%</p>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-3"><div className="bg-green-500 h-1.5 rounded-full" style={{width: '65%'}}></div></div>
-                  <p className="text-[11px] text-gray-400 mt-1">Up 4 points from October</p>
-                </div>
-                <div className="bg-[#FBE1DE] dark:bg-red-900/20 p-5 rounded-2xl border border-red-200 dark:border-red-800 shadow-sm">
-                  <div className="flex justify-between items-start mb-2"><span className="text-xs font-bold text-red-700 dark:text-red-400">Learners Needing Urgent Support</span><AlertTriangle className="text-red-500" size={20}/></div>
-                  <p className="text-4xl font-extrabold text-red-700 dark:text-red-400">12</p>
-                  <p className="text-[11px] text-red-600 dark:text-red-400 mt-1">Rated Needs Support in 3 or more components</p>
-                </div>
-              </div>
-
-              {/* Table */}
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden transition-colors">
                 <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800">
                   <div>
-                    <h3 className="font-bold text-gray-900 dark:text-white text-base">Progress Summary</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Fluency: 70% of Grade 2 proficient.</p>
-                  </div>
-                  <div className="flex gap-4 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                    <span className="flex items-center gap-1.5"><b className="w-2.5 h-2.5 rounded bg-red-500"></b> Needs Support</span>
-                    <span className="flex items-center gap-1.5"><b className="w-2.5 h-2.5 rounded bg-yellow-400"></b> Developing</span>
-                    <span className="flex items-center gap-1.5"><b className="w-2.5 h-2.5 rounded bg-green-500"></b> Proficient</span>
+                    <h3 className="font-bold text-gray-900 dark:text-white text-base">Form 5: Data Review</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Compare baseline with the latest synced assessments.</p>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left">
                     <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                       <tr>
-                        <th className="px-5 py-3 font-bold text-gray-600 dark:text-gray-300">Component · Grade 2</th>
-                        <th className="px-2 py-3 text-center text-red-600 dark:text-red-400">Needs Support</th>
-                        <th className="px-2 py-3 text-center text-yellow-600 dark:text-yellow-400">Developing</th>
-                        <th className="px-2 py-3 text-center text-green-600 dark:text-green-400">Proficient</th>
-                        <th className="px-5 py-3 font-bold min-w-[200px]">% Proficient</th>
+                        <th className="px-5 py-3 font-bold text-gray-600 dark:text-gray-300">Learner (LRN)</th>
+                        <th className="px-5 py-3 font-bold text-gray-600 dark:text-gray-300">Baseline (R / N)</th>
+                        <th className="px-5 py-3 font-bold text-gray-600 dark:text-gray-300">Current Status</th>
+                        <th className="px-5 py-3 font-bold text-gray-600 dark:text-gray-300">Priority Need</th>
+                        <th className="px-5 py-3 font-bold min-w-[200px]">Reading Progress (Fluency)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                      <tr className="bg-blue-50/50 dark:bg-blue-900/10">
-                        <td colSpan="5" className="px-5 py-2 text-[10px] font-extrabold text-blue-700 dark:text-blue-400 uppercase tracking-widest">Reading</td>
-                      </tr>
-                      {[
-                        { name: 'Oral Language', ns: 3, dv: 9, pf: 38 },
-                        { name: 'Phonics', ns: 5, dv: 11, pf: 34 },
-                        { name: 'Fluency', ns: 5, dv: 10, pf: 35 },
-                        { name: 'Comprehension', ns: 9, dv: 16, pf: 25 }
-                      ].map((row, i) => {
-                        const total = row.ns + row.dv + row.pf;
-                        const pct = Math.round((row.pf / total) * 100);
+                      {cloudAssessments.map((rec) => {
+                        const info = getLearnerInfo(rec.learner_id);
                         return (
-                          <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                            <td className="px-5 py-3 font-bold text-gray-800 dark:text-gray-200">{row.name}</td>
-                            <td className="px-2 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{row.ns}</td>
-                            <td className="px-2 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{row.dv}</td>
-                            <td className="px-2 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{row.pf}</td>
+                          <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                             <td className="px-5 py-3">
-                              <div className="flex items-center gap-3">
-                                <div className="flex-1 h-3 rounded-full overflow-hidden flex bg-gray-100 dark:bg-gray-700">
-                                  <div className="bg-red-500 h-full" style={{width: `${(row.ns/total)*100}%`}}></div>
-                                  <div className="bg-yellow-400 h-full" style={{width: `${(row.dv/total)*100}%`}}></div>
-                                  <div className="bg-green-500 h-full" style={{width: `${(row.pf/total)*100}%`}}></div>
-                                </div>
-                                <span className="font-extrabold text-gray-700 dark:text-gray-300 w-8 text-right text-xs">{pct}%</span>
+                              <span className="font-bold text-gray-800 dark:text-gray-200 block">{info.last_name}, {info.first_name}</span>
+                              <span className="text-[10px] text-gray-500">LRN: {info.lrn || 'N/A'}</span>
+                            </td>
+                            <td className="px-5 py-3 text-xs">
+                              <span className="block">Read: <b>{info.reading_baseline || '-'}</b></span>
+                              <span className="block">Num: <b>{info.numeracy_baseline || '-'}</b></span>
+                            </td>
+                            <td className="px-5 py-3 text-xs">
+                              <span className="block">Read: <b>{rec.reading_components?.fluency || '-'}</b></span>
+                              <span className="block">Num: <b>{rec.numeracy_components?.numberSense || '-'}</b></span>
+                            </td>
+                            <td className="px-5 py-3 text-xs text-gray-600 dark:text-gray-400">
+                              {info.priority_need || '-'}
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex flex-col gap-1">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold w-max ${rec.reading_components?.fluency === 'Needs Support' ? 'bg-red-100 text-red-700' : rec.reading_components?.fluency === 'Developing' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                                  {rec.reading_components?.fluency || 'N/A'}
+                                </span>
+                                <span className="text-[10px] text-gray-500 truncate max-w-[200px]">{rec.next_instructional_step || 'No action plan yet'}</span>
                               </div>
                             </td>
                           </tr>
                         );
                       })}
+                      {cloudAssessments.length === 0 && (
+                        <tr><td colSpan="5" className="px-5 py-8 text-center text-gray-500">No data synced yet.</td></tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -535,7 +581,7 @@ export default function App() {
       )}
 
       {/* ========================================================= */}
-      {/* SUPER ADMIN DASHBOARD (Simple Layout) */}
+      {/* SUPER ADMIN DASHBOARD */}
       {/* ========================================================= */}
       {userRole === 'superAdmin' && (
         <div className="p-8 max-w-6xl mx-auto space-y-6">
@@ -555,17 +601,25 @@ export default function App() {
         </div>
       )}
 
-      {/* MODALS (Shared across views) */}
+      {/* ========================================================= */}
+      {/* MODALS */}
+      {/* ========================================================= */}
+      
+      {/* ADD LEARNER MODAL (Form 1) */}
       {isLearnerModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Register New Learner</h3>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
               <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="First Name" value={newLearner.firstName} onChange={e => setNewLearner({...newLearner, firstName: e.target.value})} />
               <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="Last Name" value={newLearner.lastName} onChange={e => setNewLearner({...newLearner, lastName: e.target.value})} />
+              <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="LRN (Learner Reference Number)" value={newLearner.lrn} onChange={e => setNewLearner({...newLearner, lrn: e.target.value})} />
               <select className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" value={newLearner.gradeLevel} onChange={e => setNewLearner({...newLearner, gradeLevel: e.target.value})}>
                 <option value="Grade 1">Grade 1</option><option value="Grade 2">Grade 2</option><option value="Grade 3">Grade 3</option><option value="Grade 4">Grade 4</option><option value="Grade 5">Grade 5</option><option value="Grade 6">Grade 6</option>
               </select>
+              <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="Reading Baseline (e.g., Grade 1 Level)" value={newLearner.readingBaseline} onChange={e => setNewLearner({...newLearner, readingBaseline: e.target.value})} />
+              <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="Numeracy Baseline (e.g., Non-Numerate)" value={newLearner.numeracyBaseline} onChange={e => setNewLearner({...newLearner, numeracyBaseline: e.target.value})} />
+              <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="Priority Learning Need" value={newLearner.priorityNeed} onChange={e => setNewLearner({...newLearner, priorityNeed: e.target.value})} />
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setIsLearnerModalOpen(false)} className="px-4 py-2 font-bold text-gray-500 dark:text-gray-400">Cancel</button>
@@ -575,6 +629,7 @@ export default function App() {
         </div>
       )}
       
+      {/* INTERVENTION MODAL */}
       {isInterventionModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
@@ -588,7 +643,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Profile Modal for Principal */}
+      {/* PROFILE MODAL */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
