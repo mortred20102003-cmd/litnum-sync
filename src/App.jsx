@@ -13,12 +13,18 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [displayName, setDisplayName] = useState('');
-  const [isLoginView, setIsLoginView] = useState(true);
+  
+  // Auth Views: 'login', 'register', 'forgot', 'recovery'
+  const [authMode, setAuthMode] = useState('login'); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState(''); // For recovery mode
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState(''); // For success messages
   const [authLoading, setAuthLoading] = useState(false);
+  
+  // UI/Theme States
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -60,6 +66,8 @@ export default function App() {
   const [interventionText, setInterventionText] = useState('');
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [tempDisplayName, setTempDisplayName] = useState('');
+  const [tempSchoolName, setTempSchoolName] = useState('');
+  const [tempGrade, setTempGrade] = useState('');
 
   // --- Effects ---
   useEffect(() => {
@@ -84,44 +92,83 @@ export default function App() {
       setSession(session);
       if (session) fetchUserProfile(session.user.id);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) fetchUserProfile(session.user.id);
-      else { setUserRole(null); setDisplayName(''); }
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthMode('recovery');
+        setSession(session); 
+      } else {
+        setSession(session);
+        if (session) fetchUserProfile(session.user.id);
+        else { setUserRole(null); setDisplayName(''); }
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
 
   const fetchUserProfile = async (userId) => {
-    const { data } = await supabase.from('profiles').select('role, display_name').eq('id', userId).single();
+    const { data } = await supabase.from('profiles').select('role, display_name, school_name, grade_handled').eq('id', userId).single();
     if (data) {
       setUserRole(data.role);
       setView(data.role);
       setDisplayName(data.display_name || data.role);
       setTempDisplayName(data.display_name || '');
+      setTempSchool(data.school_name || '');
+      setTempGrade(data.grade_handled || '');
     }
   };
 
   const handleAuth = async (e) => {
-    e.preventDefault(); setAuthError(''); setAuthLoading(true);
+    e.preventDefault(); 
+    setAuthError(''); 
+    setAuthSuccess('');
+    setAuthLoading(true);
+
     try {
-      if (isLoginView) {
+      if (authMode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-      } else {
+      } 
+      else if (authMode === 'register') {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         if (data.user) await supabase.from('profiles').insert([{ id: data.user.id, email, role: 'teacher' }]);
+      } 
+      else if (authMode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+        setAuthSuccess('Password reset link sent! Please check your email.');
+      } 
+      else if (authMode === 'recovery') {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        setAuthSuccess('Password updated successfully!');
+        setTimeout(() => {
+          setAuthMode('login');
+          setNewPassword('');
+        }, 2000);
       }
-    } catch (error) { setAuthError(error.message); } finally { setAuthLoading(false); }
+    } catch (error) { 
+      setAuthError(error.message); 
+    } finally { 
+      setAuthLoading(false); 
+    }
   };
 
   const handleLogout = async () => { await supabase.auth.signOut(); setUserRole(null); setSession(null); };
 
-  const saveProfile = async () => {
-    await supabase.from('profiles').update({ display_name: tempDisplayName }).eq('id', session.user.id);
+    const saveProfile = async () => {
+    await supabase.from('profiles').update({ 
+      display_name: tempDisplayName,
+      school_name: tempSchool,
+      grade_handled: tempGrade
+    }).eq('id', session.user.id);
+
     setDisplayName(tempDisplayName);
     setIsProfileModalOpen(false);
+    alert("Profile updated successfully!");
   };
 
   useEffect(() => {
@@ -222,23 +269,100 @@ export default function App() {
     return <button onClick={onClick} className={base + styles}>{icon}<span className="mt-0.5">{label}</span></button>;
   };
 
-  // --- LOGIN SCREEN ---
-  if (!session || !userRole) {
+  // --- LOGIN / AUTH SCREEN ---
+  if ((!session || !userRole) || authMode === 'recovery') {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-[#EDF1F7] dark:bg-[#0A111D]">
         <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl max-w-md w-full">
           <div className="text-center mb-8">
-            <div className="bg-blue-100 dark:bg-blue-900/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><User className="text-blue-600 dark:text-blue-400" size={32} /></div>
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Welcome</h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{isLoginView ? 'Login to continue' : 'Create an account'}</p>
+            <div className="bg-blue-100 dark:bg-blue-900/50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <User className="text-blue-600 dark:text-blue-400" size={32} />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
+              {authMode === 'login' && 'Welcome Back'}
+              {authMode === 'register' && 'Create an Account'}
+              {authMode === 'forgot' && 'Reset Password'}
+              {authMode === 'recovery' && 'Set New Password'}
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+              {authMode === 'login' && 'Login to continue to your portal'}
+              {authMode === 'register' && 'Sign up to start monitoring'}
+              {authMode === 'forgot' && 'Enter your email to receive a reset link'}
+              {authMode === 'recovery' && 'Enter your new secure password'}
+            </p>
           </div>
+
           {authError && <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-lg text-sm mb-4 text-center">{authError}</div>}
+          {authSuccess && <div className="bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-3 rounded-lg text-sm mb-4 text-center">{authSuccess}</div>}
+
           <form onSubmit={handleAuth} className="space-y-4">
-            <div className="relative"><Mail className="absolute left-3 top-3.5 text-gray-400" size={18} /><input type="email" placeholder="Email" className="w-full pl-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={email} onChange={e => setEmail(e.target.value)} required /></div>
-            <div className="relative"><Lock className="absolute left-3 top-3.5 text-gray-400" size={18} /><input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={password} onChange={e => setPassword(e.target.value)} required /><button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
-            <button type="submit" disabled={authLoading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700">{authLoading ? 'Processing...' : (isLoginView ? 'Login' : 'Register')}</button>
+            
+            {/* EMAIL INPUT */}
+            {authMode !== 'recovery' && (
+              <div className="relative">
+                <Mail className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                <input type="email" placeholder="Email Address" className="w-full pl-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={email} onChange={e => setEmail(e.target.value)} required />
+              </div>
+            )}
+
+            {/* PASSWORD INPUT */}
+            {(authMode === 'login' || authMode === 'register') && (
+              <div className="relative">
+                <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={password} onChange={e => setPassword(e.target.value)} required />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            )}
+
+            {/* NEW PASSWORD INPUT */}
+            {authMode === 'recovery' && (
+              <div className="relative">
+                <Lock className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                <input type={showPassword ? "text" : "password"} placeholder="New Password" className="w-full pl-10 pr-10 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength="6" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-gray-400">
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            )}
+
+            {/* FORGOT PASSWORD LINK */}
+            {authMode === 'login' && (
+              <div className="flex justify-end">
+                <button type="button" onClick={() => { setAuthMode('forgot'); setAuthError(''); setAuthSuccess(''); }} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
+                  Forgot Password?
+                </button>
+              </div>
+            )}
+
+            <button type="submit" disabled={authLoading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition">
+              {authLoading ? 'Processing...' : 
+                authMode === 'login' ? 'Login' : 
+                authMode === 'register' ? 'Register' : 
+                authMode === 'forgot' ? 'Send Reset Link' : 'Update Password'
+              }
+            </button>
           </form>
-          <div className="mt-6 text-center"><button onClick={() => setIsLoginView(!isLoginView)} className="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600">{isLoginView ? "Don't have an account? Sign up" : "Already have an account? Login"}</button></div>
+
+          {/* BOTTOM LINKS */}
+          <div className="mt-6 text-center space-y-2">
+            {authMode === 'login' && (
+              <button onClick={() => { setAuthMode('register'); setAuthError(''); }} className="text-sm text-gray-500 hover:text-blue-600 block w-full">
+                Don't have an account? Sign up
+              </button>
+            )}
+            {authMode === 'register' && (
+              <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-sm text-gray-500 hover:text-blue-600 block w-full">
+                Already have an account? Login
+              </button>
+            )}
+            {authMode === 'forgot' && (
+              <button onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }} className="text-sm text-gray-500 hover:text-blue-600 block w-full font-bold">
+                Back to Login
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -315,7 +439,20 @@ export default function App() {
                       <button onClick={() => { setSelectedLearner(null); setTeacherTab('learners'); }} className="text-xs bg-white/20 px-3 py-1.5 rounded-lg font-semibold">Close</button>
                     </div>
                     <div className="p-4 space-y-5">
-                      
+                      {/* SHOW PRINCIPAL INTERVENTION ALERT */}
+                      {cloudAssessments.find(a => a.learner_id === selectedLearner.id && a.intervention_plan) && (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 p-4 rounded-r-xl mb-2">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="text-yellow-600 dark:text-yellow-500 mt-0.5" size={20} />
+                            <div>
+                              <h4 className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Principal's Action Plan</h4>
+                              <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
+                                "{cloudAssessments.find(a => a.learner_id === selectedLearner.id && a.intervention_plan).intervention_plan}"
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {/* Checkpoint */}
                       <div>
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-1">Monitoring Checkpoint</label>
@@ -430,7 +567,7 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: PROFILE */}
+                        {/* TAB: PROFILE */}
             {teacherTab === 'profile' && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 animate-fade-in">
                 <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-100 dark:border-gray-700">
@@ -442,10 +579,34 @@ export default function App() {
                 </div>
                 
                 <div className="space-y-5">
+                  
+                  {/* Display Name */}
                   <div>
                     <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">Display Name</label>
                     <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white" value={tempDisplayName} onChange={e => setTempDisplayName(e.target.value)} />
                   </div>
+
+                  {/* School Name */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">School Name</label>
+                    <input type="text" className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white" placeholder="e.g. Sampaguita Elementary School" value={tempSchool} onChange={e => setTempSchool(e.target.value)} />
+                  </div>
+
+                  {/* Grade Handled */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">Grade Level Handled</label>
+                    <select className="w-full p-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-sm text-gray-900 dark:text-white" value={tempGrade} onChange={e => setTempGrade(e.target.value)}>
+                      <option value="">Select Grade</option>
+                      <option value="Grade 1">Grade 1</option>
+                      <option value="Grade 2">Grade 2</option>
+                      <option value="Grade 3">Grade 3</option>
+                      <option value="Grade 4">Grade 4</option>
+                      <option value="Grade 5">Grade 5</option>
+                      <option value="Grade 6">Grade 6</option>
+                    </select>
+                  </div>
+
+                  {/* Theme Toggle */}
                   <div>
                     <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">Theme</label>
                     <div className="flex gap-2">
@@ -453,6 +614,7 @@ export default function App() {
                       <button onClick={() => setTheme('dark')} className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 font-bold text-xs transition ${theme === 'dark' ? 'border-blue-600 bg-blue-900/30 text-blue-400' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'}`}><Moon size={16} /> Dark</button>
                     </div>
                   </div>
+                  
                   <button onClick={saveProfile} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl mt-4">Save Changes</button>
                   <button onClick={handleLogout} className="w-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold py-3 rounded-xl flex justify-center items-center gap-2"><LogOut size={16}/> Logout</button>
                 </div>
@@ -536,39 +698,46 @@ export default function App() {
                         <th className="px-5 py-3 font-bold min-w-[200px]">Reading Progress (Fluency)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                      {cloudAssessments.map((rec) => {
-                        const info = getLearnerInfo(rec.learner_id);
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {[
+                        { key: 'fluency', label: 'Fluency' },
+                        { key: 'comprehension', label: 'Comprehension' },
+                        { key: 'phonics', label: 'Phonics' }
+                      ].map((item, i) => {
+                        // Calculate real numbers from your synced data
+                        const total = cloudAssessments.length || 1;
+                        let ns = 0, dv = 0, pf = 0;
+                        
+                        cloudAssessments.forEach(rec => {
+                          const val = rec.reading_components?.[item.key];
+                          if (val === 'Needs Support') ns++;
+                          else if (val === 'Developing') dv++;
+                          else if (val === 'Proficient') pf++;
+                        });
+
+                        const pct = Math.round((pf / total) * 100);
+
                         return (
-                          <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                          <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td className="px-5 py-3 font-bold text-gray-800 dark:text-gray-200">{item.label}</td>
+                            <td className="px-2 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{ns}</td>
+                            <td className="px-2 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{dv}</td>
+                            <td className="px-2 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{pf}</td>
                             <td className="px-5 py-3">
-                              <span className="font-bold text-gray-800 dark:text-gray-200 block">{info.last_name}, {info.first_name}</span>
-                              <span className="text-[10px] text-gray-500">LRN: {info.lrn || 'N/A'}</span>
-                            </td>
-                            <td className="px-5 py-3 text-xs">
-                              <span className="block">Read: <b>{info.reading_baseline || '-'}</b></span>
-                              <span className="block">Num: <b>{info.numeracy_baseline || '-'}</b></span>
-                            </td>
-                            <td className="px-5 py-3 text-xs">
-                              <span className="block">Read: <b>{rec.reading_components?.fluency || '-'}</b></span>
-                              <span className="block">Num: <b>{rec.numeracy_components?.numberSense || '-'}</b></span>
-                            </td>
-                            <td className="px-5 py-3 text-xs text-gray-600 dark:text-gray-400">
-                              {info.priority_need || '-'}
-                            </td>
-                            <td className="px-5 py-3">
-                              <div className="flex flex-col gap-1">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold w-max ${rec.reading_components?.fluency === 'Needs Support' ? 'bg-red-100 text-red-700' : rec.reading_components?.fluency === 'Developing' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
-                                  {rec.reading_components?.fluency || 'N/A'}
-                                </span>
-                                <span className="text-[10px] text-gray-500 truncate max-w-[200px]">{rec.next_instructional_step || 'No action plan yet'}</span>
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 h-3 rounded-full overflow-hidden flex bg-gray-100 dark:bg-gray-700">
+                                  <div className="bg-red-500 h-full" style={{width: `${(ns/total)*100}%`}}></div>
+                                  <div className="bg-yellow-400 h-full" style={{width: `${(dv/total)*100}%`}}></div>
+                                  <div className="bg-green-500 h-full" style={{width: `${(pf/total)*100}%`}}></div>
+                                </div>
+                                <span className="font-extrabold text-gray-700 dark:text-gray-300 w-8 text-right text-xs">{pct}%</span>
                               </div>
                             </td>
                           </tr>
                         );
                       })}
                       {cloudAssessments.length === 0 && (
-                        <tr><td colSpan="5" className="px-5 py-8 text-center text-gray-500">No data synced yet.</td></tr>
+                        <tr><td colSpan="5" className="px-5 py-8 text-center text-gray-500">No data synced yet. Teachers need to sync assessments.</td></tr>
                       )}
                     </tbody>
                   </table>
